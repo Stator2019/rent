@@ -2,16 +2,15 @@
     'code/RPackages.R',
     encoding = 'UTF-8'
   )
-  
 
 
 # 解壓縮歷史資料 -----------------------------------------------------------------
 
   # 先解單一個檔案
-    system2(
-      "C:/Program Files/7-Zip/7z.exe",
-      args = 'x C:/R_work/rent/data/lvr_landxml_110q1.zip -oC:/R_work/rent/data/lvr_landxml_110q1'
-    )
+  # 介紹command line。先用 system2 解壓縮單一個檔案，
+  # 接著用 unlink 刪除解壓縮出來的資料夾。
+  # 再來以迴圈批次解壓縮。批次解壓縮後，
+  # 稍微看一下資料夾內容。(10~15分鐘)
   
   system2(
     "C:/Program Files/7-Zip/7z.exe",
@@ -21,19 +20,17 @@
   unlink('data/lvr_landxml_110q1',
          recursive = T)
     
-  file.remove('data/lvr_landxml_110q1')
-  unlink('data/lvr_landxml_110q1',
-         recursive = T)
   
-  # 以迴圈批次解壓縮
-    for(file_name in dir('data/lvr_land_history', 
+  
+  # 以迴圈批次解壓縮(5~10分鐘)
+    for(file_name in dir('data', 
                          pattern = '.zip$')){
       system2("C:/Program Files/7-Zip/7z.exe",
               args = paste0("x ", 
-                            getwd(), '/data/lvr_land_history/', 
+                            getwd(), '/data/', 
                             file_name, " -o", 
                             getwd(), 
-                            '/data/lvr_land_history/data_history/',
+                            '/data/lvr_land_history/',
                             str_replace_all(
                               file_name,
                               pattern = '.zip',
@@ -41,95 +38,178 @@
               )
       )
     }
+ 
 
-
-
-
-# 合併 107~110 全國租賃(土地+建物)資料-----------------------------------------------------------------
+# 合併全國租賃(土地+建物)資料-----------------------------------------------------------------
+  
   root_path <- 
     paste(sep = '/',
           getwd(),
-          'data/lvr_land_history/data_history')
+          'data/lvr_land_history')
+  
+  # 先合併一季
+  
+  file_folder <- 
+    paste(sep = '/',
+          root_path,
+          'lvr_landxml_110q1')
+  
+  data_file <- 
+    dir(file_folder,
+        pattern = '_lvr_land_c.csv')
+  
+  # 合併時先直接用 UTF-8 合併，然後會發現有問題。以VS code 開啟原始資料後
+  # 會發現帶有 UTF-8-BOM。再引導學生在 HELP 中查到 UTF-8-BOM 的資訊
+  # 這裡可以順便提 RStudio 與說明文件整合很好的好處(10~15分鐘)
+  
+  tmp <- 
+    map_dfr(
+      data_file,
+      function(x){
+        raw_data <- 
+          read.csv(
+            file = paste(sep = '/',
+                         file_folder,
+                         x),
+            fileEncoding = 'UTF-8-BOM',
+            header = F,
+            skip = 2
+          )
+        
+        var_name <- 
+          read.csv(
+            file = paste(sep = '/',
+                         file_folder,
+                         x),
+            fileEncoding = 'UTF-8-BOM',
+            header = T,
+            nrows = 1
+          )
+        
+        names(raw_data) <- names(var_name)
+        
+        raw_data <- 
+          raw_data %>% 
+            mutate(
+              data_source = str_replace_all(x, pattern = '.csv', '')
+            )
+        
+        return(raw_data)
+      }
+    )
+  
+  # 一次合併全部
+  # 實務小技巧：產生「資料資料夾」、「資料名稱」以及「流水號」
+  # 直接合併後，發現「土地面積平方公尺」及「租賃年月日」的型態不一致(15~20分鐘)
   
   file_folder <- 
     dir(root_path)
   
-  tmp <- 
+  tmp_folder <- 
     map_dfr(
       file_folder,
       function(folder){
-        data_file <- 
+        map_dfr(
           dir(paste(sep = '/',
                     root_path,
-                    folder),
-              pattern = '_lvr_land_c.csv')
-        
-        tmp <- 
-          map_dfr(
-            data_file,
-            function(file_name){
-              
-              raw_data <- 
-                read.csv(
-                  file = paste(sep = '/',
-                               root_path,
-                               folder,
-                               file_name),
-                  fileEncoding = 'UTF-8-BOM',
-                  skip = 1,
-                  colClasses = c(building.shifting.total.area = 'double',
-                                 land.shifting.total.area.square.meter = 'character',
-                                 transaction.year.month.and.day = 'character')
-                )
-              
-              # var_name <- 
-              #   fread(
-              #     file = paste(sep = '/',
-              #                  root_path,
-              #                  folder,
-              #                  file_name),
-              #     encoding = 'UTF-8',
-              #     nrows = 1
-              #   ) %>% 
-              #   names()
-              # 
-              # names(raw_data) <- var_name
-              
-              raw_data <- 
-                raw_data %>% 
-                mutate(
-                  data_source = file_name
-                ) 
-              
-              return(raw_data)
-            }
-          )
-        return(tmp)
+                    folder), 
+              pattern = '_lvr_land_c.csv'),
+          function(x){
+            raw_data <- 
+              read.csv(
+                file = paste(sep = '/',
+                             root_path,
+                             folder,
+                             x),
+                fileEncoding = 'UTF-8-BOM',
+                header = F,
+                skip = 2
+              )
+            
+            var_name <- 
+              read.csv(
+                file = paste(sep = '/',
+                             root_path,
+                             folder,
+                             x),
+                fileEncoding = 'UTF-8-BOM',
+                header = T,
+                nrows = 1
+              )
+            
+            names(raw_data) <- names(var_name)
+            
+            raw_data <- 
+              raw_data %>% 
+              mutate(
+                data_folder = folder,
+                data_source = x,
+                土地面積平方公尺 = as.character(土地面積平方公尺),
+                租賃年月日 = as.character(租賃年月日)
+              )
+            
+            return(raw_data)
+          }
+        )
       }
+    ) %>% 
+    mutate(
+      seq_id = row_number()
     )
+  
+  # 合併之後簡單地檢查資料
+  str(tmp_folder)
+  distinct(tmp_folder, 租賃年月日) %>% 
+    arrange(租賃年月日) %>% 
+    View()
+  
+  # 發現租賃年月日裡有英文字。打開原始資料發現是因","造成資料偏移
+  # 解決因","造成資料偏移的問題(15~20分鐘)
+  
+  correct_text <- 
+    str_c(tmp_folder[16898, 1:7],
+          collapse = '|')
+  
+  tmp_folder <- 
+    bind_rows(
+      tmp_folder[-(16897:16898),],
+      tmp_folder[16897, ] %>% 
+        mutate(備註 = paste(sep = '|', 備註, correct_text),
+                 編號 = tmp_folder[16898, 8])
+    )
+  
+  # 與 mainifest.csv 串接，得知檔名意義
+  # 在串接之前，務必確保資料內是一對一，避免之後串資料時有資料澎脹的問題
+  # (10~15分鐘)
+  
+  manifest <- 
+    map_dfr(
+      file_folder,
+      function(x){
+        read.csv(
+          file = paste(sep = '/',
+                       root_path,
+                       x,
+                       'manifest.csv'),
+          fileEncoding = 'UTF-8-BOM'
+        )
+      }
+    ) %>% 
+    distinct(name, description)
   
   rent_result <- 
     left_join(
-      tmp,
-      fread(
-        file = paste(sep = '/',
-                     root_path,
-                     file_folder[1],
-                     'manifest.csv'),
-        encoding = 'UTF-8',
-        select = c('name', 'description')
-      ),
+      tmp_folder,
+      manifest %>% 
+        filter(grepl(name, pattern = 'lvr_land_c.csv')) %>% 
+        distinct(),
       by = c('data_source' = 'name')
     ) %>% 
     mutate(
-      city = str_sub(description, 1, 3)
-    ) %>% 
-    filter(grepl(serial.number,
-                  pattern = '^[A-Z]')) %>% 
-    mutate(
-      land.shifting.total.area.square.meter = as.double(land.shifting.total.area.square.meter),
-      transaction.year.month.and.day = as.integer(transaction.year.month.and.day)
+      縣市 = str_sub(description, 1, 3)
     )
+  
+  # 處理時間-將建築剛成年月轉成日期 yyyymmdd 格式(20 ~ 25)
   
   write_excel_csv(
     rent_result %>% 
@@ -140,6 +220,9 @@
                  'RVRS_107.csv'),
     na = ''
   )
+  
+  # git 網址
+  # https://github.com/Stator2019/rent.git
 
 
 # 產生完整住址清單 ----------------------------------------------------------------
